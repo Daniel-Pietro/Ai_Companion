@@ -1,0 +1,6 @@
+*.onnx
+*.pth
+*.bin
+__pycache__/
+*.pyc
+generated/

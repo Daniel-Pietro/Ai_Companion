@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AICompanion — Sara</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #05060e;
+  --bg2:     #08091a;
+  --gold:    #c9a96e;
+  --gold2:   #e8c98a;
+  --teal:    #00c8b4;
+  --teal2:   #00ffe8;
+  --text:    #e8e0d0;
+  --muted:   #4a4860;
+  --border:  rgba(201,169,110,0.12);
+  --glass:   rgba(255,255,255,0.03);
+  --ff-title: 'Syne', sans-serif;
+  --ff-body:  'Cormorant Garamond', serif;
+  --ff-mono:  'JetBrains Mono', monospace;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ff-body);
+  font-size: 17px;
+  cursor: none;
+}
+
+/* ── CUSTOM CURSOR ── */
+#cursor {
+  position: fixed; top: 0; left: 0;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--gold);
+  pointer-events: none; z-index: 9999;
+  transform: translate(-50%,-50%);
+  transition: transform 0.1s, width 0.3s, height 0.3s, background 0.3s;
+  mix-blend-mode: screen;
+}
+#cursor-ring {
+  position: fixed; top: 0; left: 0;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid rgba(201,169,110,0.5);
+  pointer-events: none; z-index: 9998;
+  transform: translate(-50%,-50%);
+  transition: transform 0.18s ease-out, width 0.3s, height 0.3s, opacity 0.3s;
+}
+body:has(button:hover) #cursor { transform: translate(-50%,-50%) scale(2.5); background: var(--teal); }
+body:has(button:hover) #cursor-ring { width: 48px; height: 48px; border-color: rgba(0,200,180,0.4); }
+
+/* ── CANVAS BG ── */
+#bg-canvas {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none;
+}
+
+/* ── LAYOUT ── */
+.app {
+  position: relative; z-index: 1;
+  height: 100vh; display: flex; flex-direction: column;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 40px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  animation: slideDown 0.8s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.brand {
+  display: flex; align-items: center; gap: 16px;
+}
+
+.brand-mark {
+  width: 28px; height: 28px;
+  border: 1px solid var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.brand-mark::before {
+  content: '';
+  position: absolute; inset: 3px;
+  background: var(--gold);
+  opacity: 0.2;
+}
+.brand-mark-inner {
+  width: 6px; height: 6px; background: var(--gold);
+  animation: markPulse 2.5s ease-in-out infinite;
+}
+@keyframes markPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.6)} }
+
+.brand-name {
+  font-family: var(--ff-title);
+  font-size: 13px; font-weight: 800;
+  letter-spacing: 6px; color: var(--text);
+  text-transform: uppercase;
+}
+
+.brand-sep { width: 1px; height: 16px; background: var(--border); }
+
+.brand-agent {
+  font-family: var(--ff-mono); font-size: 10px;
+  color: var(--gold); letter-spacing: 2px;
+}
+
+.topbar-right { display: flex; align-items: center; gap: 24px; }
+
+.pill {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--ff-mono); font-size: 9px;
+  letter-spacing: 2px; color: var(--muted); text-transform: uppercase;
+}
+.pill-dot {
+  width: 4px; height: 4px; border-radius: 50%; background: var(--teal);
+  animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+.btn-ghost {
+  font-family: var(--ff-mono); font-size: 9px;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: var(--muted); background: transparent;
+  border: 1px solid var(--border); padding: 6px 16px;
+  cursor: none; transition: all 0.3s;
+}
+.btn-ghost:hover { color: var(--gold); border-color: rgba(201,169,110,0.4); }
+
+/* ── MAIN AREA ── */
+.main {
+  flex: 1; display: flex; overflow: hidden;
+}
+
+/* ── AGENT SIDEBAR ── */
+.sidebar {
+  width: 300px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 40px 32px;
+  border-right: 1px solid var(--border);
+  position: relative;
+  animation: slideLeft 0.9s cubic-bezier(0.16,1,0.3,1) 0.1s both;
+}
+
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* vertical label */
+.sidebar-vlabel {
+  position: absolute; left: 18px; top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  font-family: var(--ff-mono); font-size: 8px;
+  letter-spacing: 5px; color: var(--muted); white-space: nowrap;
+  text-transform: uppercase;
+}
+
+/* ORB */
+.orb-wrap {
+  position: relative; display: flex;
+  align-items: center; justify-content: center;
+  margin-bottom: 32px;
+}
+
+.orb-rings {
+  position: absolute; inset: -24px;
+}
+
+.orb-ring {
+  position: absolute; border-radius: 50%;
+  border: 1px solid rgba(201,169,110,0.15);
+  animation: orbRing 6s linear infinite;
+}
+.orb-ring:nth-child(1) { inset: 0; animation-duration: 8s; }
+.orb-ring:nth-child(2) { inset: -14px; animation-duration: 12s; animation-direction: reverse; border-color: rgba(0,200,180,0.1); }
+.orb-ring:nth-child(3) { inset: -28px; animation-duration: 18s; border-color: rgba(201,169,110,0.07); }
+
+@keyframes orbRing {
+  from { transform: rotate(0deg) scaleX(1); }
+  50%  { transform: rotate(180deg) scaleX(0.85); }
+  to   { transform: rotate(360deg) scaleX(1); }
+}
+
+.orb {
+  width: 140px; height: 140px; border-radius: 50%;
+  position: relative; z-index: 2;
+  background: radial-gradient(circle at 35% 35%, #1a1a3a 0%, #08091a 60%, #050610 100%);
+  border: 1px solid rgba(201,169,110,0.3);
+  box-shadow:
+    0 0 40px rgba(201,169,110,0.08),
+    0 0 80px rgba(0,200,180,0.05),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  transition: box-shadow 0.5s;
+}
+
+.orb.thinking {
+  box-shadow:
+    0 0 60px rgba(0,200,180,0.2),
+    0 0 120px rgba(0,200,180,0.08),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+  border-color: rgba(0,200,180,0.4);
+}
+
+.orb.speaking {
+  box-shadow:
+    0 0 60px rgba(201,169,110,0.25),
+    0 0 120px rgba(201,169,110,0.1),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+  border-color: rgba(201,169,110,0.5);
+}
+
+.orb-inner {
+  width: 70px; height: 70px; position: relative;
+}
+
+/* wave SVG inside orb */
+.orb-wave {
+  width: 100%; height: 100%;
+}
+
+.orb-wave path {
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  fill: none;
+  opacity: 0.7;
+}
+
+.orb.thinking .orb-wave path { stroke: var(--teal); }
+
+/* glow dot */
+.orb-glow {
+  position: absolute; top: 20%; left: 25%;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%);
+}
+
+/* agent info below orb */
+.agent-name {
+  font-family: var(--ff-title);
+  font-size: 22px; font-weight: 800;
+  letter-spacing: 5px; text-transform: uppercase;
+  color: var(--text); margin-bottom: 6px; text-align: center;
+}
+
+.agent-title {
+  font-family: var(--ff-body); font-style: italic;
+  font-size: 14px; color: var(--gold); letter-spacing: 1px;
+  text-align: center; margin-bottom: 24px;
+}
+
+.agent-status {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--ff-mono); font-size: 9px;
+  color: var(--muted); letter-spacing: 2px; text-transform: uppercase;
+}
+
+.status-light {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--teal); box-shadow: 0 0 8px var(--teal);
+  animation: blink 2s ease-in-out infinite;
+}
+
+/* waveform bars (speaking indicator) */
+.waveform {
+  display: flex; align-items: center; gap: 2px;
+  height: 20px; margin-top: 20px; opacity: 0;
+  transition: opacity 0.3s;
+}
+.waveform.active { opacity: 1; }
+.wbar {
+  width: 3px; background: var(--gold); border-radius: 2px;
+  animation: wbar 1s ease-in-out infinite;
+  transform-origin: bottom;
+}
+.wbar:nth-child(1){height:6px;animation-delay:0s}
+.wbar:nth-child(2){height:14px;animation-delay:0.1s}
+.wbar:nth-child(3){height:20px;animation-delay:0.2s}
+.wbar:nth-child(4){height:12px;animation-delay:0.3s}
+.wbar:nth-child(5){height:18px;animation-delay:0.15s}
+.wbar:nth-child(6){height:8px;animation-delay:0.05s}
+.wbar:nth-child(7){height:16px;animation-delay:0.25s}
+
+@keyframes wbar {
+  0%,100%{transform:scaleY(0.4);opacity:0.5}
+  50%{transform:scaleY(1);opacity:1}
+}
+
+/* decorative corner */
+.corner { position: absolute; width: 16px; height: 16px; }
+.corner-tl { top: 20px; left: 44px; border-top: 1px solid rgba(201,169,110,0.3); border-left: 1px solid rgba(201,169,110,0.3); }
+.corner-tr { top: 20px; right: 20px; border-top: 1px solid rgba(201,169,110,0.3); border-right: 1px solid rgba(201,169,110,0.3); }
+.corner-bl { bottom: 20px; left: 44px; border-bottom: 1px solid rgba(201,169,110,0.3); border-left: 1px solid rgba(201,169,110,0.3); }
+.corner-br { bottom: 20px; right: 20px; border-bottom: 1px solid rgba(201,169,110,0.3); border-right: 1px solid rgba(201,169,110,0.3); }
+
+/* ── CHAT PANEL ── */
+.chat-panel {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  animation: slideRight 0.9s cubic-bezier(0.16,1,0.3,1) 0.15s both;
+}
+
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* messages */
+#messages {
+  flex: 1; overflow-y: auto;
+  padding: 48px 56px;
+  display: flex; flex-direction: column; gap: 32px;
+  scroll-behavior: smooth;
+}
+
+#messages::-webkit-scrollbar { width: 2px; }
+#messages::-webkit-scrollbar-track { background: transparent; }
+#messages::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ── WELCOME ── */
+.welcome {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: flex-start; justify-content: center;
+  gap: 12px; padding: 0 8px;
+  animation: welcomeIn 1s cubic-bezier(0.16,1,0.3,1) 0.4s both;
+}
+
+@keyframes welcomeIn {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.welcome-eyebrow {
+  font-family: var(--ff-mono); font-size: 9px;
+  letter-spacing: 5px; color: var(--gold); text-transform: uppercase;
+}
+
+.welcome-h1 {
+  font-family: var(--ff-title); font-size: 52px;
+  font-weight: 800; line-height: 1; letter-spacing: -1px;
+  color: var(--text);
+}
+
+.welcome-h1 em {
+  font-style: italic; font-weight: 400;
+  color: var(--gold);
+}
+
+.welcome-sub {
+  font-family: var(--ff-body); font-style: italic;
+  font-size: 18px; color: var(--muted); max-width: 420px;
+  line-height: 1.6; margin-top: 4px;
+}
+
+.welcome-divider {
+  width: 48px; height: 1px; background: var(--gold); opacity: 0.4;
+  margin: 8px 0;
+}
+
+.welcome-hint {
+  font-family: var(--ff-mono); font-size: 9px;
+  color: var(--muted); letter-spacing: 3px; text-transform: uppercase;
+}
+
+/* ── MESSAGES ── */
+.msg {
+  display: flex; flex-direction: column; gap: 6px;
+  animation: msgIn 0.4s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.msg-meta {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--ff-mono); font-size: 9px;
+  letter-spacing: 2px; text-transform: uppercase;
+}
+
+.msg.user .msg-meta { flex-direction: row-reverse; }
+
+.meta-label { color: var(--muted); }
+.msg.ai .meta-label { color: var(--gold); }
+
+.meta-line { flex: 1; height: 1px; background: var(--border); max-width: 60px; }
+
+.msg-body {
+  max-width: 640px;
+  font-size: 17px; line-height: 1.75;
+  letter-spacing: 0.15px;
+}
+
+.msg.user { align-items: flex-end; }
+.msg.user .msg-body {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-right: 2px solid rgba(201,169,110,0.4);
+  padding: 16px 22px;
+  text-align: right;
+}
+
+.msg.ai .msg-body {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-left: 2px solid rgba(0,200,180,0.4);
+  padding: 16px 22px;
+  position: relative;
+}
+
+/* subtle gradient shimmer on AI bubble */
+.msg.ai .msg-body::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,200,180,0.3), transparent);
+}
+
+/* ── AUDIO PLAYER ── */
+.audio-player {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.play-btn {
+  width: 30px; height: 30px;
+  border: 1px solid rgba(201,169,110,0.4);
+  background: transparent;
+  color: var(--gold); cursor: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; flex-shrink: 0;
+  transition: all 0.25s;
+}
+.play-btn:hover {
+  background: rgba(201,169,110,0.1);
+  border-color: var(--gold);
+}
+
+.track { flex: 1; height: 1px; background: var(--border); position: relative; cursor: none; }
+.progress { position: absolute; left: 0; top: 0; height: 100%; background: var(--gold); width: 0%; transition: width 0.1s linear; }
+
+/* moving dot on progress */
+.track-dot {
+  position: absolute; top: 50%; transform: translate(-50%,-50%);
+  width: 5px; height: 5px; border-radius: 50%; background: var(--gold);
+  left: 0%; transition: left 0.1s linear;
+}
+
+.time-label {
+  font-family: var(--ff-mono); font-size: 9px;
+  color: var(--muted); letter-spacing: 1px; white-space: nowrap;
+}
+
+/* ── TYPING INDICATOR ── */
+.typing-msg {
+  display: flex; flex-direction: column; gap: 6px;
+  animation: msgIn 0.3s ease both;
+}
+.typing-bubble {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-left: 2px solid rgba(0,200,180,0.4);
+  padding: 16px 22px;
+  display: flex; gap: 6px; align-items: center;
+  width: fit-content;
+}
+.typing-dot {
+  width: 4px; height: 4px; border-radius: 50%; background: var(--teal);
+  animation: tdot 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2){animation-delay:.2s}
+.typing-dot:nth-child(3){animation-delay:.4s}
+@keyframes tdot {
+  0%,80%,100%{transform:scale(0.5);opacity:0.3}
+  40%{transform:scale(1);opacity:1}
+}
+
+/* ── INPUT ZONE ── */
+.input-zone {
+  padding: 24px 56px 28px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* gold line top */
+.input-zone::before {
+  content: '';
+  position: absolute; top: 0; left: 56px; right: 56px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,169,110,0.3), transparent);
+}
+
+.input-row { display: flex; gap: 14px; align-items: flex-end; }
+
+.input-wrap {
+  flex: 1; position: relative;
+}
+
+#input {
+  width: 100%;
+  background: transparent;
+  border: none; border-bottom: 1px solid rgba(201,169,110,0.25);
+  color: var(--text);
+  font-family: var(--ff-body); font-size: 17px;
+  line-height: 1.6; padding: 12px 0 12px 0;
+  resize: none; outline: none;
+  min-height: 48px; max-height: 140px;
+  transition: border-color 0.3s;
+}
+
+#input:focus { border-bottom-color: var(--gold); }
+#input::placeholder { color: var(--muted); font-style: italic; }
+
+/* animated underline */
+.input-underline {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: var(--gold); transform: scaleX(0);
+  transform-origin: left; transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
+}
+#input:focus ~ .input-underline { transform: scaleX(1); }
+
+.send-btn {
+  width: 48px; height: 48px; flex-shrink: 0;
+  background: transparent;
+  border: 1px solid rgba(201,169,110,0.35);
+  color: var(--gold); cursor: none;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.3s; position: relative; overflow: hidden;
+}
+
+.send-btn::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--gold); opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.send-btn:hover::before { opacity: 0.12; }
+.send-btn:hover { border-color: var(--gold); box-shadow: 0 0 20px rgba(201,169,110,0.15); }
+.send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.send-icon { position: relative; z-index: 1; font-size: 14px; }
+
+.input-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 10px;
+}
+
+.model-tag {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--ff-mono); font-size: 8px;
+  color: var(--muted); letter-spacing: 2px; text-transform: uppercase;
+}
+.model-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--teal); }
+
+.kbd-hint {
+  font-family: var(--ff-mono); font-size: 8px;
+  color: var(--muted); letter-spacing: 1px;
+}
+
+/* ── SCROLLBAR ── */
+* { scrollbar-width: thin; scrollbar-color: rgba(201,169,110,0.1) transparent; }
+</style>
+</head>
+<body>
+
+<!-- Custom cursor -->
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+
+<!-- Particle canvas -->
+<canvas id="bg-canvas"></canvas>
+
+<div class="app">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"><div class="brand-mark-inner"></div></div>
+      <span class="brand-name">AICompanion</span>
+      <div class="brand-sep"></div>
+      <span class="brand-agent">Sara · v2.0</span>
+    </div>
+    <div class="topbar-right">
+      <div class="pill"><div class="pill-dot"></div>OLLAMA ONLINE</div>
+      <div class="pill"><div class="pill-dot" style="background:var(--gold);box-shadow:0 0 6px var(--gold)"></div>RAG ATTIVO</div>
+      <button class="btn-ghost" onclick="resetChat()">RESET</button>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- AGENT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="corner corner-tl"></div>
+      <div class="corner corner-tr"></div>
+      <div class="corner corner-bl"></div>
+      <div class="corner corner-br"></div>
+      <div class="sidebar-vlabel">Sistema Agente · Kokoro TTS</div>
+
+      <!-- ORB -->
+      <div class="orb-wrap">
+        <div class="orb-rings">
+          <div class="orb-ring"></div>
+          <div class="orb-ring"></div>
+          <div class="orb-ring"></div>
+        </div>
+        <div class="orb" id="orb">
+          <div class="orb-glow"></div>
+          <div class="orb-inner">
+            <svg class="orb-wave" viewBox="0 0 70 70" id="orbSvg">
+              <path id="orbPath" d=""/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="agent-name">Sara</div>
+      <div class="agent-title">Assistente Intelligente</div>
+
+      <div class="agent-status">
+        <div class="status-light" id="statusLight"></div>
+        <span id="statusText">In ascolto</span>
+      </div>
+
+      <!-- Waveform when speaking -->
+      <div class="waveform" id="waveform">
+        <div class="wbar"></div><div class="wbar"></div>
+        <div class="wbar"></div><div class="wbar"></div>
+        <div class="wbar"></div><div class="wbar"></div>
+        <div class="wbar"></div>
+      </div>
+    </aside>
+
+    <!-- CHAT -->
+    <div class="chat-panel">
+      <div id="messages">
+        <div class="welcome" id="welcome">
+          <div class="welcome-eyebrow">AICompanion · Powered by Ollama + RAG</div>
+          <div class="welcome-h1">Ciao,<br>sono <em>Sara.</em></div>
+          <div class="welcome-divider"></div>
+          <div class="welcome-sub">Posso rispondere alle tue domande usando la mia base di conoscenza. Chiedimi qualsiasi cosa.</div>
+          <div class="welcome-hint">Scrivi un messaggio per iniziare</div>
+        </div>
+      </div>
+
+      <div class="input-zone">
+        <div class="input-row">
+          <div class="input-wrap">
+            <textarea id="input"
+              placeholder="Scrivi un messaggio a Sara…"
+              onkeydown="handleKey(event)"
+              oninput="autoResize(this)"
+              rows="1"></textarea>
+            <div class="input-underline"></div>
+          </div>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Invia">
+            <span class="send-icon">→</span>
+          </button>
+        </div>
+        <div class="input-footer">
+          <div class="model-tag">
+            <div class="model-dot"></div>
+            gemma3:4b · im_Sara · it · porto 9000
+          </div>
+          <div class="kbd-hint">ENTER — invia &nbsp;·&nbsp; SHIFT+ENTER — nuova riga</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ── CURSOR ── */
+const cur = document.getElementById('cursor');
+const ring = document.getElementById('cursor-ring');
+let mx = 0, my = 0, rx = 0, ry = 0;
+document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+function animCursor() {
+  cur.style.left = mx + 'px'; cur.style.top = my + 'px';
+  rx += (mx - rx) * 0.12; ry += (my - ry) * 0.12;
+  ring.style.left = rx + 'px'; ring.style.top = ry + 'px';
+  requestAnimationFrame(animCursor);
+}
+animCursor();
+
+/* ── PARTICLE CANVAS ── */
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let W, H, particles = [], connections = [];
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.r = Math.random() * 1.2 + 0.4;
+    this.alpha = Math.random() * 0.4 + 0.1;
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    if (this.x < 0 || this.x > W || this.y < 0 || this.y > H) this.reset();
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(201,169,110,${this.alpha})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 80; i++) particles.push(new Particle());
+
+function drawParticles() {
+  ctx.clearRect(0, 0, W, H);
+  particles.forEach(p => { p.update(); p.draw(); });
+  // connections
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 120) {
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        const a = (1 - dist / 120) * 0.08;
+        ctx.strokeStyle = `rgba(201,169,110,${a})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+  requestAnimationFrame(drawParticles);
+}
+drawParticles();
+
+/* ── ORB WAVE ANIMATION ── */
+let orbPhase = 0;
+let orbAmplitude = 8;
+let targetAmplitude = 8;
+
+function animOrb() {
+  orbPhase += 0.04;
+  orbAmplitude += (targetAmplitude - orbAmplitude) * 0.08;
+  const cx = 35, cy = 35, r = 22;
+  let d = `M ${cx - r} ${cy}`;
+  const steps = 60;
+  for (let i = 0; i <= steps; i++) {
+    const angle = (i / steps) * Math.PI * 2;
+    const wave = Math.sin(angle * 3 + orbPhase) * orbAmplitude * 0.5
+               + Math.sin(angle * 5 - orbPhase * 1.3) * orbAmplitude * 0.3;
+    const rr = r + wave;
+    const x = cx + Math.cos(angle) * rr;
+    const y = cy + Math.sin(angle) * rr;
+    d += ` L ${x} ${y}`;
+  }
+  d += ' Z';
+  document.getElementById('orbPath').setAttribute('d', d);
+  requestAnimationFrame(animOrb);
+}
+animOrb();
+
+/* ── STATE ── */
+const API = 'http://127.0.0.1:9000';
+let loading = false;
+const orb = document.getElementById('orb');
+const waveform = document.getElementById('waveform');
+const statusText = document.getElementById('statusText');
+const statusLight = document.getElementById('statusLight');
+const audios = {};
+
+function setOrbState(state) {
+  orb.className = 'orb';
+  waveform.classList.remove('active');
+  if (state === 'thinking') {
+    orb.classList.add('thinking');
+    targetAmplitude = 18;
+    statusText.textContent = 'Elaborando…';
+    statusLight.style.background = 'var(--teal)';
+    statusLight.style.boxShadow = '0 0 10px var(--teal)';
+  } else if (state === 'speaking') {
+    orb.classList.add('speaking');
+    targetAmplitude = 14;
+    waveform.classList.add('active');
+    statusText.textContent = 'Parlando';
+    statusLight.style.background = 'var(--gold)';
+    statusLight.style.boxShadow = '0 0 10px var(--gold)';
+  } else {
+    targetAmplitude = 8;
+    statusText.textContent = 'In ascolto';
+    statusLight.style.background = 'var(--teal)';
+    statusLight.style.boxShadow = '0 0 8px var(--teal)';
+  }
+}
+
+/* ── HELPERS ── */
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function fmt(s) { return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'); }
+
+/* ── RENDER MSG ── */
+function addMsg(role, text, audioUrl) {
+  const msgs = document.getElementById('messages');
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+
+  const label = role === 'ai' ? 'Sara' : 'TU';
+
+  const aid = 'a' + Date.now();
+  let audioHTML = '';
+  if (audioUrl && role === 'ai') {
+    audioHTML = `
+      <div class="audio-player">
+        <button class="play-btn" id="btn-${aid}" onclick="toggleAudio('${aid}','${audioUrl}',this)">▶</button>
+        <div class="track">
+          <div class="progress" id="prog-${aid}"></div>
+          <div class="track-dot" id="dot-${aid}"></div>
+        </div>
+        <span class="time-label" id="time-${aid}">0:00</span>
+      </div>`;
+  }
+
+  div.innerHTML = `
+    <div class="msg-meta">
+      <span class="meta-label">${label}</span>
+      <div class="meta-line"></div>
+    </div>
+    <div class="msg-body">${text.replace(/\n/g,'<br>')}${audioHTML}</div>`;
+
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function showTyping() {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'typing-msg'; div.id = 'typing';
+  div.innerHTML = `
+    <div class="msg-meta"><span class="meta-label" style="color:var(--gold)">Sara</span><div class="meta-line"></div></div>
+    <div class="typing-bubble">
+      <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+    </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeTyping() { const t=document.getElementById('typing'); if(t)t.remove(); }
+
+/* ── AUDIO ── */
+function toggleAudio(id, url, btn) {
+  Object.entries(audios).forEach(([k,a]) => {
+    if (k !== id && !a.paused) {
+      a.pause(); a.currentTime = 0;
+      const b = document.getElementById('btn-'+k); if(b) b.textContent='▶';
+      const p = document.getElementById('prog-'+k); if(p) p.style.width='0%';
+      const d = document.getElementById('dot-'+k); if(d) d.style.left='0%';
+    }
+  });
+  if (!audios[id]) {
+    const a = new Audio(url); audios[id] = a;
+    a.ontimeupdate = () => {
+      const pct = (a.currentTime / a.duration * 100) || 0;
+      const p = document.getElementById('prog-'+id); if(p) p.style.width=pct+'%';
+      const d = document.getElementById('dot-'+id); if(d) d.style.left=pct+'%';
+      const t = document.getElementById('time-'+id); if(t) t.textContent=fmt(a.currentTime);
+    };
+    a.onplay = () => setOrbState('speaking');
+    a.onpause = () => setOrbState('idle');
+    a.onended = () => {
+      btn.textContent='▶';
+      const p=document.getElementById('prog-'+id); if(p)p.style.width='0%';
+      const d=document.getElementById('dot-'+id); if(d)d.style.left='0%';
+      setOrbState('idle');
+    };
+  }
+  const a = audios[id];
+  if (a.paused) { a.play(); btn.textContent='■'; }
+  else { a.pause(); btn.textContent='▶'; }
+}
+
+/* ── SEND ── */
+async function sendMessage() {
+  if (loading) return;
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  loading = true;
+  document.getElementById('sendBtn').disabled = true;
+  input.value = ''; input.style.height = 'auto';
+  addMsg('user', text);
+  showTyping();
+  setOrbState('thinking');
+
+  try {
+    const res = await fetch(`${API}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    });
+    const data = await res.json();
+    removeTyping();
+    setOrbState('idle');
+
+    let audioUrl = null;
+    try {
+      const tr = await fetch(`${API}/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: data.response, voice: 'im_Sara', lang: 'it' })
+      });
+      if (tr.ok) {
+        const blob = await tr.blob();
+        audioUrl = URL.createObjectURL(blob);
+      }
+    } catch(_) {}
+
+    addMsg('ai', data.response, audioUrl);
+
+    // auto-play
+    if (audioUrl) {
+      const aid = document.querySelectorAll('.msg.ai').length;
+      // small delay then play
+      setTimeout(() => {
+        const playBtns = document.querySelectorAll('.play-btn');
+        const last = playBtns[playBtns.length-1];
+        if (last) last.click();
+      }, 300);
+    }
+
+  } catch(err) {
+    removeTyping();
+    setOrbState('idle');
+    addMsg('ai', '⚠ Impossibile connettersi al server Flask sulla porta 9000.\nAssicurati che <strong>aicompanion.py</strong> sia in esecuzione.');
+  }
+
+  loading = false;
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+async function resetChat() {
+  try { await fetch(`${API}/reset`, {method:'POST'}); } catch(_){}
+  document.getElementById('messages').innerHTML = `
+    <div class="welcome" id="welcome">
+      <div class="welcome-eyebrow">AICompanion · Powered by Ollama + RAG</div>
+      <div class="welcome-h1">Sessione<br><em>resettata.</em></div>
+      <div class="welcome-divider"></div>
+      <div class="welcome-sub">La conversazione è stata cancellata. Puoi iniziare una nuova sessione.</div>
+      <div class="welcome-hint">Scrivi un messaggio per iniziare</div>
+    </div>`;
+  setOrbState('idle');
+}
+
+document.getElementById('input').focus();
+</script>
+</body>
+</html>
